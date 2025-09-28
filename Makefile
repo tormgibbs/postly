@@ -21,6 +21,12 @@ confirm:
 # DEVELOPMENT
 # =================================================================================== #
 
+## tunnel: start ngrok tunnel for API
+.PHONY: tunnel
+tunnel:
+	@echo "Starting ngrok tunnel on port 5000 with domain $(NGROK_DOMAIN)..."
+	@ngrok http --domain=$(NGROK_DOMAIN) 5000
+
 ## run/api: run the cmd/api application
 .PHONY: run/api
 run/api:
