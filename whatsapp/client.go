@@ -1,4 +1,4 @@
-package main
+package whatsapp
 
 import (
 	"bytes"
@@ -7,32 +7,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
-type Message struct {
-	ID string `json:"id"`
-}
-
-type Contact struct {
-	Input string `json:"input"`
-	WaID  string `json:"wa_id"`
-}
-
-type WhatsAppResponse struct {
-	MessagingProduct string    `json:"messaging_product"`
-	Contacts         []Contact `json:"contacts"`
-	Messages         []Message `json:"messages"`
-}
-
-func main() {
-	godotenv.Load()
-
+func SendMessage(recipient, message string) error {
 	accessToken := os.Getenv("WHATSAPP_ACCESS_TOKEN")
 	phoneNumberID := os.Getenv("WHATSAPP_PHONE_NUMBER_ID")
-	recipient := os.Getenv("WHATSAPP_TEST_RECIPIENT")
-
 
 	url := fmt.Sprintf("https://graph.facebook.com/v23.0/%s/messages", phoneNumberID)
 
@@ -41,7 +20,7 @@ func main() {
 		"to":                recipient,
 		"type":              "text",
 		"text": map[string]string{
-			"body": "hello world",
+			"body": message,
 		},
 	}
 
@@ -54,14 +33,11 @@ func main() {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer resp.Body.Close()
 
 	raw, _ := io.ReadAll(resp.Body)
-
-	var pretty bytes.Buffer
-	json.Indent(&pretty, raw, "", "  ")
-
-	fmt.Println("Status:", resp.Status, "\nBody:", pretty.String())
+	fmt.Println("WhatsApp response:", string(raw))
+	return nil
 }
