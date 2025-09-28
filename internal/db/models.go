@@ -5,13 +5,17 @@
 package db
 
 import (
+	"database/sql"
 	"time"
 )
 
 type User struct {
-	ID         int32
-	WhatsappID string
-	IsLoggedIn bool
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID           int32
+	WhatsappID   string
+	AccessToken  sql.NullString
+	RefreshToken sql.NullString
+	TokenExpiry  sql.NullTime
+	IsLoggedIn   bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }

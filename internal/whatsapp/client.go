@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -19,33 +20,27 @@ func NewClient(phoneID, token string) *Client {
 	}
 }
 
+func (c *Client) Send(msg any) error {
+	url := fmt.Sprintf("https://graph.facebook.com/v23.0/%s/messages", c.phoneID)
 
-func (c *Client) SendText(to, text string) error {
-	url := fmt.Sprintf("https://graph.facebook.com/v18.0/%s/messages", c.phoneID)
-
-	body := map[string]any{
-		"messaging_product": "whatsapp",
-		"to":                to,
-		"type":              "text",
-		"text": map[string]string{
-			"body": text,
-		},
+	body, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	jsonBody, _ := json.Marshal(body)
-
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("http error: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("whatsapp api returned %d", resp.StatusCode)
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("whatsapp api returned status: %d, response: %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil

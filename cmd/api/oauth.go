@@ -1,12 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tormgibbs/postly/internal/db"
 	"golang.org/x/oauth2"
 )
 
@@ -19,7 +19,7 @@ func (app *application) handleOAuth2Callback(c *gin.Context) {
 	state := c.Query("state")
 	code := c.Query("code")
 
-	if code != "" || state == "" {
+	if code == "" || state == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "missing code or state",
@@ -27,9 +27,23 @@ func (app *application) handleOAuth2Callback(c *gin.Context) {
 		return
 	}
 
-	token, err := app.oauth.Exchange(context.Background(), code)
+	waID := strings.TrimPrefix(state, "wa_")
+
+	user, err := app.queries.GetUserByWhatsAppID(c, waID)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Printf("\nuser not found: %s\n", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user not found"})
+		return
+	}
+
+	if user.IsLoggedIn {
+		c.Redirect(http.StatusSeeOther, "/success")
+		return
+	}
+
+	token, err := app.oauth.Exchange(c, code)
+	if err != nil {
+		fmt.Printf("\nfailed to exchange token: %s\n", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   "failed to exchange token",
@@ -37,27 +51,20 @@ func (app *application) handleOAuth2Callback(c *gin.Context) {
 		return
 	}
 
-	var whatsappID string
-	if strings.HasPrefix(state, "wa_") {
-		whatsappID = strings.TrimPrefix(state, "wa_")
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid state"})
-		return
+	params := db.SetUserLoggedInWithTokenParams{
+		WhatsappID:   waID,
+		AccessToken:  db.ToNullString(token.AccessToken),
+		RefreshToken: db.ToNullString(token.RefreshToken),
+		TokenExpiry:  db.ToNullTime(token.Expiry),
 	}
 
-	if err := app.queries.SetUserLoggedIn(c, whatsappID); err != nil {
+	err = app.queries.SetUserLoggedInWithToken(c, params)
+
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user login"})
 		return
 	}
 
-	fmt.Printf("Access token: %s\n", token.AccessToken)
-	fmt.Printf("Refresh token: %s\n", token.RefreshToken)
 
-	c.String(http.StatusOK, "Gmail connected! You can close this tab.")
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":     "Login successful",
-		"whatsapp_id": whatsappID,
-	})
-
+	c.Redirect(http.StatusSeeOther, "/success")
 }

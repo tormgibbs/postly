@@ -7,13 +7,14 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (whatsapp_id)
 VALUES ($1)
 ON CONFLICT (whatsapp_id) DO UPDATE SET updated_at = now()
-RETURNING id, whatsapp_id, is_logged_in, created_at, updated_at
+RETURNING id, whatsapp_id, access_token, refresh_token, token_expiry, is_logged_in, created_at, updated_at
 `
 
 func (q *Queries) CreateUser(ctx context.Context, whatsappID string) (User, error) {
@@ -22,6 +23,9 @@ func (q *Queries) CreateUser(ctx context.Context, whatsappID string) (User, erro
 	err := row.Scan(
 		&i.ID,
 		&i.WhatsappID,
+		&i.AccessToken,
+		&i.RefreshToken,
+		&i.TokenExpiry,
 		&i.IsLoggedIn,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -30,7 +34,7 @@ func (q *Queries) CreateUser(ctx context.Context, whatsappID string) (User, erro
 }
 
 const getUserByWhatsAppID = `-- name: GetUserByWhatsAppID :one
-SELECT id, whatsapp_id, is_logged_in, created_at, updated_at FROM users WHERE whatsapp_id = $1 LIMIT 1
+SELECT id, whatsapp_id, access_token, refresh_token, token_expiry, is_logged_in, created_at, updated_at FROM users WHERE whatsapp_id = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserByWhatsAppID(ctx context.Context, whatsappID string) (User, error) {
@@ -39,6 +43,9 @@ func (q *Queries) GetUserByWhatsAppID(ctx context.Context, whatsappID string) (U
 	err := row.Scan(
 		&i.ID,
 		&i.WhatsappID,
+		&i.AccessToken,
+		&i.RefreshToken,
+		&i.TokenExpiry,
 		&i.IsLoggedIn,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -46,13 +53,30 @@ func (q *Queries) GetUserByWhatsAppID(ctx context.Context, whatsappID string) (U
 	return i, err
 }
 
-const setUserLoggedIn = `-- name: SetUserLoggedIn :exec
+const setUserLoggedInWithToken = `-- name: SetUserLoggedInWithToken :exec
 UPDATE users
-SET is_logged_in = true, updated_at = now()
+SET 
+  is_logged_in = true,
+  access_token = $2,
+  refresh_token = $3,
+  token_expiry = $4,
+  updated_at = now()
 WHERE whatsapp_id = $1
 `
 
-func (q *Queries) SetUserLoggedIn(ctx context.Context, whatsappID string) error {
-	_, err := q.db.ExecContext(ctx, setUserLoggedIn, whatsappID)
+type SetUserLoggedInWithTokenParams struct {
+	WhatsappID   string
+	AccessToken  sql.NullString
+	RefreshToken sql.NullString
+	TokenExpiry  sql.NullTime
+}
+
+func (q *Queries) SetUserLoggedInWithToken(ctx context.Context, arg SetUserLoggedInWithTokenParams) error {
+	_, err := q.db.ExecContext(ctx, setUserLoggedInWithToken,
+		arg.WhatsappID,
+		arg.AccessToken,
+		arg.RefreshToken,
+		arg.TokenExpiry,
+	)
 	return err
 }

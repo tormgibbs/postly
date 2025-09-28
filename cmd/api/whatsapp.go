@@ -29,8 +29,6 @@ func (app *application) handleWhatsAppWebhook(c *gin.Context) {
 		return
 	}
 
-	
-	app.logger.Info("Received WhatsApp webhook", "payload", payload)
 
 	if len(payload.Entry) == 0 || len(payload.Entry[0].Changes) == 0 {
 		c.Status(http.StatusOK)
@@ -45,10 +43,6 @@ func (app *application) handleWhatsAppWebhook(c *gin.Context) {
 
 	msg := value.Messages[0]
 	from := msg.From
-	// text := ""
-	// if msg.Text != nil {
-	// 	text = msg.Text.Body
-	// }
 
 	user, err := app.queries.GetUserByWhatsAppID(c, from)
 	if err != nil {
@@ -61,7 +55,6 @@ func (app *application) handleWhatsAppWebhook(c *gin.Context) {
 	}
 
 	if !user.IsLoggedIn {
-		// put the WhatsApp user ID in the state param
 		state := fmt.Sprintf("wa_%s", from)
 
 		loginURL := app.oauth.AuthCodeURL(
@@ -69,13 +62,30 @@ func (app *application) handleWhatsAppWebhook(c *gin.Context) {
 			oauth2.AccessTypeOffline,
 		)
 
-		_ = app.whatsapp.SendText(from, "Welcome! Please login: "+loginURL)
-	}
+		body := whatsapp.InteractiveBody{
+			Type: "cta_url",
+			Body: whatsapp.InteractiveText{
+				Text: "👋 Hey there! Welcome aboard.\n\nTo get started, you’ll need to connect your Gmail account so we can sync your emails with WhatsApp. Don’t worry — it’s quick and secure.",
+			},
+			Action: whatsapp.InteractiveAction{
+				Name: "cta_url",
+				Parameters: map[string]any{
+					"display_text": "Connect Google",
+					"url":          loginURL,
+				},
+			},
+			Footer: &whatsapp.InteractiveText{
+				Text: "We’ll sync your Gmail once you approve access.",
+			},
+		}
 
-	// if !user.IsLoggedIn {
-	// 	loginURL := app.oauth.AuthCodeURL("state", oauth2.AccessTypeOffline)
-	// 	_ = app.whatsapp.SendText(from, "Welcome! Please login: "+loginURL)
-	// }
+		err = app.whatsapp.SendInteractive(from, body)
+		if err != nil {
+			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed send message"})
+			return
+		}
+	}
 
 	c.Status(http.StatusOK)
 }
